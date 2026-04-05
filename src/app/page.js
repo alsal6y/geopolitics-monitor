@@ -1,3 +1,5 @@
+"use client";
+import { useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 
 const MapView = dynamic(() => import("@/components/Map/MapView"), {
@@ -9,10 +11,21 @@ const MapView = dynamic(() => import("@/components/Map/MapView"), {
   ),
 });
 
+const NewsFeed = dynamic(() => import("@/components/NewsFeed/NewsFeed"), {
+  ssr: false,
+});
+
 export default function Home() {
+  const [arcs, setArcs] = useState([]);
+  const [hoveredId, setHoveredId] = useState(null);
+
+  const handleArcsReady = useCallback((newArcs) => setArcs(newArcs), []);
+  const handleHover = useCallback((id) => setHoveredId(id), []);
+
   return (
     <main className="relative w-screen h-screen overflow-hidden bg-black">
-      <MapView />
+      <MapView arcs={arcs} hoveredId={hoveredId} />
+      <NewsFeed onArcsReady={handleArcsReady} onHover={handleHover} />
     </main>
   );
 }

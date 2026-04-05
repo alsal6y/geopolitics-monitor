@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -14,14 +13,13 @@ const INITIAL_VIEW = {
   bearing: 0,
 };
 
-export default function MapView() {
+export default function MapView({ arcs = [], hoveredId = null }) {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const [viewState, setViewState] = useState(INITIAL_VIEW);
 
   useEffect(() => {
     if (map.current) return;
-
     map.current = new maplibregl.Map({
       container: mapContainer.current,
       style: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
@@ -30,7 +28,6 @@ export default function MapView() {
       pitch: INITIAL_VIEW.pitch,
       bearing: INITIAL_VIEW.bearing,
     });
-
     map.current.on("move", () => {
       const c = map.current.getCenter();
       setViewState({
@@ -41,7 +38,6 @@ export default function MapView() {
         bearing: map.current.getBearing(),
       });
     });
-
     return () => {
       map.current?.remove();
       map.current = null;
@@ -52,7 +48,7 @@ export default function MapView() {
     <div className="absolute inset-0 w-full h-full">
       <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
       <DeckErrorBoundary>
-        <ArcOverlay viewState={viewState} />
+        <ArcOverlay viewState={viewState} arcs={arcs} hoveredId={hoveredId} />
       </DeckErrorBoundary>
     </div>
   );
