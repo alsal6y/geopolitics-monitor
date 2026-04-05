@@ -1,15 +1,23 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, forwardRef, useImperativeHandle } from "react";
 import { ArcLayer } from "@deck.gl/layers";
 import DeckGLOverlay from "./DeckGLOverlay";
 
-export default function ArcOverlay({ viewState, arcs = [], hoveredId = null }) {
+const ArcOverlay = forwardRef(function ArcOverlay(
+  { viewState, arcs = [], hoveredId = null },
+  ref
+) {
   const [opacity, setOpacity] = useState(0);
+  const deckGLRef = useRef(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setOpacity(1), 500);
     return () => clearTimeout(timer);
   }, []);
+
+  useImperativeHandle(ref, () => ({
+    pickObject: (params) => deckGLRef.current?.pickObject(params),
+  }));
 
   const hasHover = hoveredId !== null;
 
@@ -34,7 +42,7 @@ export default function ArcOverlay({ viewState, arcs = [], hoveredId = null }) {
     },
     getHeight: 0.4,
     opacity: opacity,
-    pickable: false,
+    pickable: true,
     updateTriggers: {
       getSourceColor: [hoveredId],
       getTargetColor: [hoveredId],
@@ -42,5 +50,7 @@ export default function ArcOverlay({ viewState, arcs = [], hoveredId = null }) {
     },
   });
 
-  return <DeckGLOverlay layers={[arcLayer]} viewState={viewState} />;
-}
+  return <DeckGLOverlay ref={deckGLRef} layers={[arcLayer]} viewState={viewState} />;
+});
+
+export default ArcOverlay;
