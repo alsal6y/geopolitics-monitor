@@ -41,7 +41,7 @@ async function fetchRSSFeed(url, sourceName) {
       || [];
 
     // Ensure items is an array (single-item feeds return an object)
-    if (!Array.isArray(items)) items = [items];
+    if (!Array.isArray(items) && items) items = [items];
 
     return items.map(item => {
       // guid can be a string or an object with #text

@@ -90,7 +90,7 @@ export async function isStale(maxAgeMinutes = 15) {
 
   for (const source of SOURCE_REGISTRY) {
     const lastFetch = await getLastFetchTime(source.id);
-    if (lastFetch && new Date(lastFetch + 'Z').getTime() >= cutoff) {
+    if (lastFetch && new Date(lastFetch.replace(' ', 'T') + 'Z').getTime() >= cutoff) {
       return false;
     }
   }

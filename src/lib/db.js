@@ -155,8 +155,8 @@ function buildWhereClause({ source, eventType, fromDate, toDate }) {
     params.push(fromDate);
   }
   if (toDate) {
-    conditions.push("pub_date <= ? || 'T23:59:59Z'");
-    params.push(toDate);
+    conditions.push('pub_date <= ?');
+    params.push(toDate + 'T23:59:59Z');
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
