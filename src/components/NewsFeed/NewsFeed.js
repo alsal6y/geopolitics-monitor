@@ -1,8 +1,22 @@
 "use client";
 import { useEffect, useState, useCallback, useRef } from "react";
-import { fetchGuardianFeed } from "@/lib/guardianParser";
-import { categorizeAll, EVENT_TYPES } from "@/lib/categorizer";
+import { EVENT_TYPES } from "@/lib/categorizer";
 import { buildArcs } from "@/lib/arcMapper";
+
+const SOURCE_META = {
+  guardian:  { name: "The Guardian",  handle: "@guardian",   color: "#1a73e8", letter: "G"   },
+  bbc:      { name: "BBC World",     handle: "@bbcworld",   color: "#bb1919", letter: "B"   },
+  aljazeera:{ name: "Al Jazeera",    handle: "@aljazeera",  color: "#d4a843", letter: "AJ"  },
+  reuters:  { name: "Reuters",       handle: "@reuters",    color: "#ff8800", letter: "R"   },
+  france24: { name: "France 24",     handle: "@france24",   color: "#2e5ea6", letter: "F24" },
+  dw:       { name: "DW News",       handle: "@dwnews",     color: "#009ee3", letter: "DW"  },
+  npr:      { name: "NPR World",     handle: "@nprworld",   color: "#3d85c6", letter: "NPR" },
+  unnews:   { name: "UN News",       handle: "@unnews",     color: "#4b92db", letter: "UN"  },
+};
+
+function getSourceInfo(sourceId) {
+  return SOURCE_META[sourceId] || { name: sourceId, handle: "", color: "#888888", letter: "?" };
+}
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000);
@@ -29,6 +43,7 @@ function Tag({ label, color }) {
 }
 
 function NewsCard({ article, onHover, isHovered, hasArc, isHighlighted }) {
+  const src = getSourceInfo(article.source);
   return (
     <a
       href={article.link}
@@ -59,14 +74,19 @@ function NewsCard({ article, onHover, isHovered, hasArc, isHighlighted }) {
         <div className="p-3">
           <div className="flex items-center gap-2 mb-2">
             <div
-              className="rounded-full bg-blue-900 flex items-center justify-center text-white font-black shrink-0"
-              style={{ width: "24px", height: "24px", fontSize: "8px" }}
+              className="rounded-full flex items-center justify-center text-white font-black shrink-0"
+              style={{
+                width: "24px",
+                height: "24px",
+                fontSize: src.letter.length > 1 ? "7px" : "8px",
+                backgroundColor: src.color,
+              }}
             >
-              G
+              {src.letter}
             </div>
             <div className="flex-1 min-w-0">
-              <span className="text-white/90 font-semibold" style={{ fontSize: "11px" }}>The Guardian</span>
-              <span className="text-white/40 ml-1" style={{ fontSize: "11px" }}>@guardian</span>
+              <span className="text-white/90 font-semibold" style={{ fontSize: "11px" }}>{src.name}</span>
+              <span className="text-white/40 ml-1" style={{ fontSize: "11px" }}>{src.handle}</span>
             </div>
             <span className="text-white/30 shrink-0" style={{ fontSize: "11px" }}>{timeAgo(article.pubDate)}</span>
           </div>
@@ -119,55 +139,91 @@ export default function NewsFeed({ onArcsReady, onHover, hoveredId, arcClickEven
   const [lastUpdated, setLastUpdated] = useState(null);
   const [arcIds, setArcIds] = useState(new Set());
   const [activeFilter, setActiveFilter] = useState(null);
-  const [mapFilter, setMapFilter] = useState("all"); // "all" | "mapped" | "unmapped"
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [mapFilter, setMapFilter] = useState("all");
   const [fromDate, setFromDate] = useState("2026-03-01");
   const [toDate, setToDate] = useState(today);
   const [highlightedId, setHighlightedId] = useState(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [activeSources, setActiveSources] = useState([]);
   const cardRefs = useRef({});
   const pendingScrollIdRef = useRef(null);
   const consumedNonceRef = useRef(null);
+  const articlesRef = useRef([]);
 
-  const load = useCallback(async () => {
+  const fetchArticles = useCallback(async (offset = 0, append = false) => {
+    if (!append) setLoading(true);
+    else setLoadingMore(true);
+
     try {
-      const raw = await fetchGuardianFeed(fromDate, toDate);
-      const categorized = categorizeAll(raw);
-      const arcs = buildArcs(categorized);
+      const params = new URLSearchParams({
+        from: fromDate,
+        to: toDate,
+        limit: "50",
+        offset: String(offset),
+      });
+      if (sourceFilter !== "all") params.set("source", sourceFilter);
+
+      const res = await fetch(`/api/articles?${params}`);
+      const data = await res.json();
+
+      if (data.error) throw new Error(data.error);
+
+      const newArticles = data.articles || [];
+      const combined = append ? [...articlesRef.current, ...newArticles] : newArticles;
+      const arcs = buildArcs(combined);
       const ids = new Set(arcs.map((a) => a.id));
+
+      articlesRef.current = combined;
       setArcIds(ids);
-      setArticles(categorized);
+      setArticles(combined);
+      setTotal(data.total || 0);
+      setHasMore(data.hasMore || false);
       setLastUpdated(new Date());
       setError(null);
       if (onArcsReady) onArcsReady(arcs);
+
+      const srcSet = new Set(combined.map(a => a.source));
+      setActiveSources([...srcSet]);
     } catch (e) {
-      setError("Feed unavailable");
+      if (!append) setError("Feed unavailable — " + e.message);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  }, [onArcsReady, fromDate, toDate]);
+  }, [onArcsReady, fromDate, toDate, sourceFilter]);
+
+  const load = useCallback(() => {
+    articlesRef.current = [];
+    fetchArticles(0, false);
+  }, [fetchArticles]);
+
+  const loadMore = useCallback(() => {
+    fetchArticles(articlesRef.current.length, true);
+  }, [fetchArticles]);
 
   useEffect(() => {
     load();
-  }, [load]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromDate, toDate, sourceFilter]);
 
   // Arc click → expand if collapsed, then scroll to card + flash highlight
   useEffect(() => {
     if (!arcClickEvent) return;
-    // Guard: ignore re-runs triggered only by isCollapsed toggling after this
-    // nonce was already consumed (prevents collapse from re-opening the panel).
     if (arcClickEvent.nonce === consumedNonceRef.current) return;
 
     if (isCollapsed) {
-      // Cards not mounted yet — store target and expand the panel
       pendingScrollIdRef.current = arcClickEvent.id;
       setIsCollapsed(false);
-      return; // effect re-fires once isCollapsed flips to false
+      return;
     }
 
-    // Panel is open — resolve the target (pending from expand, or direct click)
     const targetId = pendingScrollIdRef.current || arcClickEvent.id;
     pendingScrollIdRef.current = null;
-    consumedNonceRef.current = arcClickEvent.nonce; // mark this click as handled
+    consumedNonceRef.current = arcClickEvent.nonce;
 
     const timer = setTimeout(() => {
       const el = cardRefs.current[targetId];
@@ -204,7 +260,6 @@ export default function NewsFeed({ onArcsReady, onHover, hoveredId, arcClickEven
         onClick={() => setIsCollapsed(false)}
         title="Expand Intel Feed"
       >
-        {/* Radar/target icon */}
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
           <circle cx="12" cy="12" r="9"/>
           <circle cx="12" cy="12" r="5"/>
@@ -253,6 +308,9 @@ export default function NewsFeed({ onArcsReady, onHover, hoveredId, arcClickEven
                   {filtered.length !== articles.length
                     ? `${filtered.length} / ${articles.length}`
                     : articles.length}
+                  {total > articles.length && (
+                    <span className="text-white/20"> of {total}</span>
+                  )}
                 </span>
               )}
             </div>
@@ -274,7 +332,6 @@ export default function NewsFeed({ onArcsReady, onHover, hoveredId, arcClickEven
               className="text-white/40 hover:text-white/80 transition-colors p-1"
               title="Collapse panel"
             >
-              {/* Panel-close icon */}
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2"/>
                 <path d="M9 3v18"/>
@@ -283,6 +340,45 @@ export default function NewsFeed({ onArcsReady, onHover, hoveredId, arcClickEven
             </button>
           </div>
         </div>
+
+        {/* Source filter chips */}
+        {activeSources.length > 1 && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            <button
+              onClick={() => setSourceFilter("all")}
+              className="px-2 py-0.5 rounded-full transition-all"
+              style={{
+                fontSize: "9px",
+                fontWeight: 600,
+                backgroundColor: sourceFilter === "all" ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.05)",
+                color: sourceFilter === "all" ? "white" : "rgba(255,255,255,0.4)",
+                border: "1px solid rgba(255,255,255,0.15)",
+              }}
+            >
+              All Sources
+            </button>
+            {activeSources.map((sid) => {
+              const meta = getSourceInfo(sid);
+              const isActive = sourceFilter === sid;
+              return (
+                <button
+                  key={sid}
+                  onClick={() => setSourceFilter(isActive ? "all" : sid)}
+                  className="px-2 py-0.5 rounded-full transition-all"
+                  style={{
+                    fontSize: "9px",
+                    fontWeight: 600,
+                    backgroundColor: isActive ? meta.color + "33" : "rgba(255,255,255,0.04)",
+                    color: isActive ? meta.color : "rgba(255,255,255,0.4)",
+                    border: "1px solid " + (isActive ? meta.color + "88" : "rgba(255,255,255,0.10)"),
+                  }}
+                >
+                  {meta.letter}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Event type filter chips */}
         <div className="flex flex-wrap gap-1">
@@ -397,10 +493,37 @@ export default function NewsFeed({ onArcsReady, onHover, hoveredId, arcClickEven
             />
           </div>
         ))}
+
+        {/* Load More */}
+        {!loading && !error && hasMore && (
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="w-full py-2.5 mb-3 rounded-xl border border-white/10 text-white/50 hover:text-white/80 hover:border-white/20 transition-all"
+            style={{
+              fontSize: "10px",
+              fontWeight: 600,
+              backgroundColor: "rgba(255,255,255,0.04)",
+            }}
+          >
+            {loadingMore ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="w-3 h-3 border border-white/20 border-t-white/70 rounded-full animate-spin" />
+                Loading…
+              </span>
+            ) : (
+              `Load More (${articles.length} of ${total})`
+            )}
+          </button>
+        )}
       </div>
 
       <div className="px-4 py-2 border-t border-white/10 shrink-0">
-        <p className="text-center text-white/20" style={{ fontSize: "9px" }}>Source: The Guardian API</p>
+        <p className="text-center text-white/20" style={{ fontSize: "9px" }}>
+          {activeSources.length > 0
+            ? `Sources: ${activeSources.map(s => getSourceInfo(s).name).join(" · ")}`
+            : "Multi-source intelligence feed"}
+        </p>
       </div>
     </div>
   );
