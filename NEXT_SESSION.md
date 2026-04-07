@@ -13,6 +13,7 @@
 - **Per-source filter chips + dynamic source badges ✅**
 - **Title-fingerprint deduplication across sources ✅**
 - **Auto-ingestion on first load (no scheduler needed) ✅**
+- **Bug fixes: isStale datetime, date filter SQL, RSS null guard, app metadata ✅**
 - Pushed to GitHub: https://github.com/alsal6y/geopolitics-monitor.git ✅
 
 ## File Structure
@@ -103,7 +104,14 @@ INGEST_SECRET=...       # optional: protects POST /api/ingest
 - @luma.gl/webgl is pinned to 9.2.6 — do not upgrade
 - PowerShell needs quotes around scoped packages: "@deck.gl/react"
 - Run: npm run dev → opens at http://localhost:3000
-- Working branch is `claude/stoic-lewin` (PR #2 open against master)
+- Working branch is `claude/brave-elbakyan` (PR #3 open against master)
+- sql.js must be installed: `npm install sql.js` (was missing from node_modules)
+
+## Bug Fixes Applied (this session)
+- `src/lib/ingest.js:93` — `isStale()` used `lastFetch + 'Z'` on SQLite's space-separated datetime; fixed to `.replace(' ', 'T') + 'Z'` for valid ISO 8601
+- `src/lib/db.js:158` — SQL `pub_date <= ? || 'T23:59:59Z'` relied on SQLite operator precedence; moved concat to JS: `params.push(toDate + 'T23:59:59Z')`
+- `src/lib/sources/rss.js:44` — single-item wrap `[items]` could create `[null]`; added `&& items` guard
+- `src/app/layout.js:15` — replaced "Create Next App" scaffold metadata with correct app title/description
 
 ## Possible Next Steps
 - Add Guardian API key to unlock full paginated history (up to 250 articles/run)
