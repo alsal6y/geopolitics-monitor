@@ -9,14 +9,20 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@deck.gl/layers": "^9.2.11",
+    "@deck.gl/react": "^9.2.11",
+    "@luma.gl/webgl": "^9.2.6",
+    "deck.gl": "^9.2.11",
+    "maplibre-gl": "^5.22.0",
+    "next": "14.2.35",
     "react": "^18",
     "react-dom": "^18",
-    "next": "14.2.35"
+    "react-map-gl": "^8.1.0"
   },
   "devDependencies": {
-    "postcss": "^8",
-    "tailwindcss": "^3.4.1",
     "eslint": "^8",
-    "eslint-config-next": "14.2.35"
+    "eslint-config-next": "14.2.35",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1"
   }
 }
